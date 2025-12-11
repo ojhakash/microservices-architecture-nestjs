@@ -1,0 +1,12 @@
+{
+  "name": "nest-microservices-demo",
+  "version": "1.0.0",
+  "description": "Complete microservices demo system with NestJS, Kafka, and observability",
+  "private": true,
+  "workspaces": [
+    "api-gateway",
+    "user-service",
+    "order-service",
+    "payment-service"
+  ]
+}

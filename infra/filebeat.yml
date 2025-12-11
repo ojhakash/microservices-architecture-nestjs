@@ -1,0 +1,129 @@
+filebeat.inputs:
+  # Collect Docker container logs (primary method - captures all containerized services)
+  - type: container
+    enabled: true
+    paths:
+      - '/var/lib/docker/containers/*/*.log'
+    processors:
+      - add_docker_metadata:
+          host: "unix:///var/run/docker.sock"
+      - decode_json_fields:
+          fields: ["message"]
+          target: "json"
+          overwrite_keys: true
+          when:
+            has_fields: ["message"]
+      # Drop infrastructure service logs - keep only application services
+      # Use container.name as fallback since labels might not always be available
+      - drop_event:
+          when:
+            or:
+              # Drop infrastructure services by container name
+              - equals:
+                  container.name: "kafka"
+              - equals:
+                  container.name: "zookeeper"
+              - equals:
+                  container.name: "postgres-user"
+              - equals:
+                  container.name: "postgres-order"
+              - equals:
+                  container.name: "elasticsearch"
+              - equals:
+                  container.name: "kibana"
+              - equals:
+                  container.name: "prometheus"
+              - equals:
+                  container.name: "grafana"
+              - equals:
+                  container.name: "jaeger"
+              - equals:
+                  container.name: "kafdrop"
+              - equals:
+                  container.name: "filebeat"
+              # Drop infrastructure services by docker compose service label
+              - equals:
+                  container.labels.com_docker_compose_service: "kafka"
+              - equals:
+                  container.labels.com_docker_compose_service: "zookeeper"
+              - equals:
+                  container.labels.com_docker_compose_service: "postgres-user"
+              - equals:
+                  container.labels.com_docker_compose_service: "postgres-order"
+              - equals:
+                  container.labels.com_docker_compose_service: "elasticsearch"
+              - equals:
+                  container.labels.com_docker_compose_service: "kibana"
+              - equals:
+                  container.labels.com_docker_compose_service: "prometheus"
+              - equals:
+                  container.labels.com_docker_compose_service: "grafana"
+              - equals:
+                  container.labels.com_docker_compose_service: "jaeger"
+              - equals:
+                  container.labels.com_docker_compose_service: "kafdrop"
+              - equals:
+                  container.labels.com_docker_compose_service: "filebeat"
+              # OR drop if it's NOT an application service AND doesn't have json.service field
+              - and:
+                  - not:
+                      or:
+                        - equals:
+                            container.name: "user-service"
+                        - equals:
+                            container.name: "order-service"
+                        - equals:
+                            container.name: "payment-service"
+                        - equals:
+                            container.name: "api-gateway"
+                        - equals:
+                            container.labels.com_docker_compose_service: "user-service"
+                        - equals:
+                            container.labels.com_docker_compose_service: "order-service"
+                        - equals:
+                            container.labels.com_docker_compose_service: "payment-service"
+                        - equals:
+                            container.labels.com_docker_compose_service: "api-gateway"
+                  - not:
+                      has_fields: ["json.service"]
+    fields:
+      log_type: 'application'
+    fields_under_root: true
+
+  # Fallback: Collect application logs from shared log file (for local development)
+  - type: log
+    enabled: true
+    paths:
+      - '/var/log/apps/app.log'
+    json.keys_under_root: true
+    json.add_error_key: true
+    json.message_key: 'msg'
+    fields:
+      log_type: 'application'
+    fields_under_root: true
+
+processors:
+  - add_fields:
+      target: ""
+      fields:
+        environment: "development"
+  - drop_fields:
+      fields: ["agent", "ecs", "log", "input"]
+
+output.elasticsearch:
+  hosts: ["http://elasticsearch:9200"]
+  indices:
+    - index: "microservices-logs-%{+yyyy.MM.dd}"
+
+setup.template.settings:
+  index.number_of_shards: 1
+  index.codec: best_compression
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644
+
