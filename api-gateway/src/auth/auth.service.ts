@@ -9,7 +9,7 @@ import { LoginDto } from './dto/login.dto';
 export interface JwtPayload {
   sub: string; // user id
   email: string;
-  role: string;
+  role?: string;
 }
 
 @Injectable()
